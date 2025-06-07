@@ -178,7 +178,8 @@ def main():
     glutInitDisplayMode(GLUT_RGBA | GLUT_DEPTH)
 
     # Especifica o tamnho inicial em pixels da janela GLUT
-    glutInitWindowSize(400, 400)
+    # glutInitWindowSize(400, 400)# Soraia pediu assim
+    glutInitWindowSize(1000, 600)
 
     # Especifica a posição de início da janela
     glutInitWindowPosition(100, 100)

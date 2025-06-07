@@ -23,7 +23,7 @@ class Point:
     def magnitude(self):
         return math.sqrt(self.x**2 + self.y**2 + self.z**2)
 
-    def normalize(self):
+    def normalized(self):
         mag = self.magnitude()
         if mag == 0:
             return Point()
@@ -31,3 +31,9 @@ class Point:
 
     def __str__(self):
         return f"Point({self.x:.2f}, {self.y:.2f}, {self.z:.2f})"
+    
+    def distance_to(self, other):
+        return math.sqrt((self.x - other.x) ** 2 + (self.y - other.y) ** 2 + (self.z - other.z) ** 2)
+    
+    def length(self):
+        return self.magnitude()
