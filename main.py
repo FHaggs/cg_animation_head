@@ -6,13 +6,19 @@ import time
 
 
 from Objeto3D import Object3D
-import Point
 
 o: Object3D
 tempo_antes = time.time()
 soma_dt = 0
 estado_animacao = "PLAY"  # Pode começar pausado ou em "PLAY"
 tempo_animado = 0.0
+
+botoes = {
+    "PLAY":   (10, 10, 125, 50),
+    "PAUSE":  (135, 10, 250, 50),
+    "REWIND": (270, 10, 385, 50),
+    "FOWARD": (405, 10, 520, 50),
+}
 
 def init():
     glClearColor(0.5, 0.5, 0.9, 1.0)
@@ -113,20 +119,88 @@ def DesenhaPiso():
         glTranslated(1, 0, 0)
     glPopMatrix()
 
+def DesenhaBotoes():
+    # Salva estado atual
+    glPushAttrib(GL_ENABLE_BIT)
+    glDisable(GL_DEPTH_TEST)
+    glDisable(GL_LIGHTING)
 
-def DesenhaCubo():
+    # Projeção ortográfica 2D
+    glMatrixMode(GL_PROJECTION)
     glPushMatrix()
-    glColor3f(1, 0, 0)
-    glTranslated(0, 0.5, 0)
-    glutSolidCube(1)
+    glLoadIdentity()
+    gluOrtho2D(0, 1000, 0, 600)
 
-    glColor3f(0.5, 0.5, 0)
-    glTranslated(0, 0.5, 0)
-    glRotatef(90, -1, 0, 0)
-    glRotatef(45, 0, 0, 1)
-    glutSolidCone(1, 1, 4, 4)
+    glMatrixMode(GL_MODELVIEW)
+    glPushMatrix()
+    glLoadIdentity()
+
+    # Desenha só os ícones
+    for nome, (x1, y1, x2, y2) in botoes.items():
+        glColor3f(1.0, 0.0, 0.0)
+        if nome == "PLAY":
+            icone_play(x1 + 10, y1 + 10)
+        elif nome == "PAUSE":
+            icone_pause(x1 + 10, y1 + 10)
+        elif nome == "REWIND":
+            icone_rewind(x1 + 5, y1 + 10)
+        elif nome == "FOWARD":
+            icone_foward(x1 + 5, y1 + 10)
+
+    # Restaura projeção
+    glPopMatrix()  # MODELVIEW
+    glMatrixMode(GL_PROJECTION)
     glPopMatrix()
+    glMatrixMode(GL_MODELVIEW)
 
+    # Restaura estados antigos
+    glPopAttrib()
+
+def icone_foward(x, y):
+    glBegin(GL_TRIANGLES)
+    # Primeira seta
+    glVertex2f(x, y)
+    glVertex2f(x, y + 20)
+    glVertex2f(x + 15, y + 10)
+
+    # Segunda seta
+    glVertex2f(x + 15, y)
+    glVertex2f(x + 15, y + 20)
+    glVertex2f(x + 30, y + 10)
+    glEnd()
+
+def icone_rewind(x, y):
+    glBegin(GL_TRIANGLES)
+    # Primeira seta
+    glVertex2f(x + 15, y)
+    glVertex2f(x + 15, y + 20)
+    glVertex2f(x, y + 10)
+
+    # Segunda seta
+    glVertex2f(x + 30, y)
+    glVertex2f(x + 30, y + 20)
+    glVertex2f(x + 15, y + 10)
+    glEnd()
+
+def icone_pause(x, y):
+    glBegin(GL_QUADS)
+    glVertex2f(x, y)
+    glVertex2f(x + 5, y)
+    glVertex2f(x + 5, y + 20)
+    glVertex2f(x, y + 20)
+
+    glVertex2f(x + 10, y)
+    glVertex2f(x + 15, y)
+    glVertex2f(x + 15, y + 20)
+    glVertex2f(x + 10, y + 20)
+    glEnd()
+
+def icone_play(x, y):
+    glBegin(GL_TRIANGLES)
+    glVertex2f(x, y)
+    glVertex2f(x, y + 20)
+    glVertex2f(x + 15, y + 10)
+    glEnd()
 
 # Function called constantly (idle) to update the animation
 def Animacao():
@@ -158,15 +232,27 @@ def desenha():
 
     glMatrixMode(GL_MODELVIEW)
 
+    DesenhaBotoes()
     DesenhaPiso()
-    # DesenhaCubo()
-    # o.Desenha()
-    # o.DesenhaWireframe()
     o.draw_vertices()
 
     glutSwapBuffers()
     pass
 
+def mouse_clique(botao, estado, x, y):
+    print(f"clicado em x={x}, y={y}")
+    altura_janela = glutGet(GLUT_WINDOW_HEIGHT)
+    y_corrigido = altura_janela - y
+    print(f"y corrigido: {y_corrigido}")
+
+    global estado_animacao
+    if botao == GLUT_LEFT_BUTTON and estado == GLUT_DOWN:
+        for nome, (x1, y1, x2, y2) in botoes.items():
+            print(f"Verificando botão '{nome}' com área ({x1}, {y1}, {x2}, {y2})")
+            if x1 <= x <= x2 and y1 <= y_corrigido <= y2:
+                estado_animacao = nome
+                print(f">>> Botão clicado: {nome}")
+                break
 
 def teclado(key, x, y):
     global estado_animacao, o
@@ -215,6 +301,7 @@ def main():
 
     init()
 
+    glutMouseFunc(mouse_clique)
     glutDisplayFunc(desenha)
     glutKeyboardFunc(teclado)
     glutIdleFunc(Animacao)
