@@ -17,7 +17,7 @@ class Object3D:
         self.position = Point(0, 0, 0)
         self.rotation = (0, 0, 0, 0)
         self.animation_state = "SWAY"
-        self.animation_start_time = time.time()
+        self.animation_start_time = 0.0
         self.initial_time = time.time()
         self.velocities = []
         self.boids_view_radius = 2.0
@@ -27,7 +27,7 @@ class Object3D:
         self.alignment_weight = 1.0
         self.separation_distance = 0.5
 
-    def load_file(self, file: str, vertex_sample_rate: int = 2):
+    def load_file(self, file: str, vertex_sample_rate: int = 1):
         """
         Load a simplified version of the file by skipping some vertices
         and their associated faces. For example, vertex_sample_rate=2
@@ -93,7 +93,7 @@ class Object3D:
             "SWAY": (0.0, 0.0, 1.0),  # Blue
             "FALL": (1.0, 0.5, 0.0),  # Orange
             "TORNADO": (0.5, 0.5, 0.5),  # Grey
-            "BOIDS": (0.0, 1.0, 0.0),  # Green
+            "BOIDS": (0.0, 0.0, 0.0),  # Green
             "REASSEMBLE": (1.0, 1.0, 0.0),  # Yellow
             "DONE": (1.0, 1.0, 1.0),  # White
         }
@@ -107,39 +107,59 @@ class Object3D:
             glPopMatrix()
         glPopMatrix()
 
-    def update(self, dt):
-        """Main update function, acts as a state machine."""
-        current_time = time.time()
-        elapsed_animation_time = current_time - self.animation_start_time
-        # self.animation_state = "BOIDS" # Debug
+    def update(self, dt, animation_time):
+        timeline = [
+            ("SWAY", 0),
+            ("FALL", 6),
+            ("TORNADO", 12),
+            ("BOIDS", 18),
+            ("REASSEMBLE", 38),
+            ("DONE", 46),
+        ]
 
+        # Encontra o estado atual com base no tempo
+        for i in range(len(timeline)-1, -1, -1):
+            state, start_time = timeline[i]
+            if animation_time >= start_time:
+                if self.animation_state != state:
+                    print(f"Transitioning from {self.animation_state} to {state}")
+                    self.animation_state = state
+                    self.animation_start_time = start_time
+
+                    # Resetar velocidades se necessário
+                    if state == "FALL":
+                        for i in range(len(self.velocities)):
+                            self.velocities[i] = Point(0, 0, 0)
+                    elif state in ["TORNADO", "BOIDS"]:
+                        for i in range(len(self.velocities)):
+                            self.velocities[i] = Point(
+                                random.uniform(-1, 1), random.uniform(-1, 1), random.uniform(-1, 1)
+                            )
+                    elif state == "SWAY":
+                        for i in range(len(self.vertices)):
+                            self.vertices[i] = self.original_vertices[i]
+                break
+
+        # Tempo relativo ao início do estado atual
+        elapsed = animation_time - self.animation_start_time
+
+        # Executa a animação do estado atual
         if self.animation_state == "SWAY":
-            self.animate_sway(elapsed_animation_time)
-            if elapsed_animation_time > 6:
-                self.transition_to_state("FALL")
+            self.animate_sway(elapsed)
         elif self.animation_state == "FALL":
             self.animate_fall(dt)
-            if elapsed_animation_time > 10:
-                self.transition_to_state("TORNADO")
         elif self.animation_state == "TORNADO":
-            self.animate_tornado(dt)
-            if elapsed_animation_time > 12:
-                self.transition_to_state("BOIDS")
+            self.animate_tornado(dt, elapsed)
         elif self.animation_state == "BOIDS":
-            ## UPDATED TO CALL THE OPTIMIZED FUNCTION ##
             self.boids_update(dt)
-            if elapsed_animation_time > 20:
-                self.transition_to_state("REASSEMBLE")
         elif self.animation_state == "REASSEMBLE":
             self.animate_reassemble(dt)
-            if elapsed_animation_time > 8:
-                self.transition_to_state("DONE")
 
     # ... (transition_to_state, sway, fall, tornado, reassemble functions remain the same) ...
-    def transition_to_state(self, new_state):
+    def transition_to_state(self, new_state, current_time):
         print(f"Transitioning from {self.animation_state} to {new_state}")
         self.animation_state = new_state
-        self.animation_start_time = time.time()
+        self.animation_start_time = current_time
 
         if new_state == "FALL":
             for i in range(len(self.velocities)):
@@ -174,20 +194,53 @@ class Object3D:
                 self.velocities[i].y *= -damping
                 self.velocities[i].x *= 0.9
 
-    def animate_tornado(self, dt):
+    def animate_tornado(self, dt, time):
         center = Point(0, -2, 0)
-        up_speed, rot_speed, suck_str = 1.5, 15.0, 2.0
+        max_radius = 2.0
+        up_speed = 7.0
+        rot_speed = 10.0
+        suck_strength = 6.0
+        top_height = 3.5  # altura máxima no centro
+        base_height = 1.0  # altura máxima nas bordas
+
         for i, v in enumerate(self.vertices):
             to_center = Point(center.x - v.x, 0, center.z - v.z)
-            dist = to_center.magnitude() or 0.1
-            radial_force = to_center.normalized() * suck_str
-            tangent_force = Point(-to_center.z, 0, to_center.x).normalized() * (
-                rot_speed / dist
-            )
-            up_force = Point(0, up_speed / (1 + dist * 0.5), 0)
-            self.velocities[i] += (radial_force + tangent_force + up_force) * dt
-            self.vertices[i] = v + self.velocities[i] * dt
-            self.velocities[i] *= 0.98
+            dist = to_center.magnitude() or 0.01
+
+            # delay para sair baseado na distância
+            start_delay = dist * 0.5
+            if time < start_delay:
+                continue
+
+            # altura máxima baseada na distância (centro sobe mais)
+            t = min(dist / max_radius, 1.0)
+            max_height = (1 - t) * top_height + t * base_height
+
+            # força radial
+            if dist > max_radius:
+                radial_force = to_center.normalized() * suck_strength
+            else:
+                radial_force = to_center.normalized() * (suck_strength * 0.3)
+
+            # força tangencial (gira mais conforme sobe)
+            height_factor = min(max((v.y + 2.0) / (top_height + 2.0), 0.0), 1.0)
+            tangent = Point(-to_center.z, 0, to_center.x).normalized()
+            tangent_force = tangent * (rot_speed * height_factor / dist)
+
+            # subida até altura personalizada
+            if v.y < max_height:
+                height_boost = max(0.0, (max_height - v.y)) * 0.2
+                up_factor = (1.5 - min(dist, 1.5)) / 1.5
+                up_force = Point(0, (up_speed * (0.3 + up_factor)) + height_boost, 0)
+            else:
+                up_force = Point(0, 0, 0)
+
+            total_force = radial_force + tangent_force + up_force
+
+            self.velocities[i] += total_force * dt
+            self.vertices[i] += self.velocities[i] * dt
+            self.velocities[i] *= 0.965
+
 
     def boids_update(self, dt):
         """

@@ -9,7 +9,8 @@ from Objeto3D import Object3D
 o: Object3D
 tempo_antes = time.time()
 soma_dt = 0
-
+estado_animacao = "PLAY"  # Pode começar pausado ou em "PLAY"
+tempo_animado = 0.0
 
 def init():
     global o
@@ -131,21 +132,30 @@ def DesenhaCubo():
 
 # Function called constantly (idle) to update the animation
 def Animacao():
-    global soma_dt, tempo_antes
+    global soma_dt, tempo_antes, tempo_animado, estado_animacao
 
     tempo_agora = time.time()
     delta_time = tempo_agora - tempo_antes
     tempo_antes = tempo_agora
 
+    if estado_animacao == "PAUSE":
+        return
+
+    if estado_animacao == "REWIND":
+        tempo_animado = max(0.0, tempo_animado - delta_time)
+        o.animation_start_time = max(0.0, o.animation_start_time - delta_time)
+    elif estado_animacao == "FORWARD":
+        tempo_animado += delta_time * 2
+        o.animation_start_time += delta_time * 2
+    elif estado_animacao == "PLAY":
+        tempo_animado += delta_time
+
     soma_dt += delta_time
 
-    # We will call the update function at a fixed rate (approx 30 FPS)
-    # This fixed delta time (dt) is good for physics stability
     if soma_dt > 1.0 / 30:
         dt = 1.0 / 30
-        o.update(dt)  # <<< THIS IS THE ONLY LINE THAT CHANGES
+        o.update(dt, tempo_animado)  # passa o tempo como argumento
         soma_dt = 0
-        
         glutPostRedisplay()
 
 
@@ -165,11 +175,15 @@ def desenha():
 
 
 def teclado(key, x, y):
-    o.rotation = (1, 0, 0, o.rotation[3] + 2)
-
-    glutPostRedisplay()
-    pass
-
+    global estado_animacao
+    if key == b'p':
+        estado_animacao = "PLAY"
+    elif key == b's':
+        estado_animacao = "PAUSE"
+    elif key == b'r':
+        estado_animacao = "REWIND"
+    elif key == b'f':
+        estado_animacao = "FORWARD"
 
 def main():
     glutInit(sys.argv)
