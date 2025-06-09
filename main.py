@@ -4,15 +4,17 @@ from OpenGL.GL import *
 
 import time
 
+
 from Objeto3D import Object3D
+import Point
 
 o: Object3D
 tempo_antes = time.time()
 soma_dt = 0
-
+estado_animacao = "PLAY"  # Pode começar pausado ou em "PLAY"
+tempo_animado = 0.0
 
 def init():
-    global o
     glClearColor(0.5, 0.5, 0.9, 1.0)
     glClearDepth(1.0)
 
@@ -20,9 +22,6 @@ def init():
     glEnable(GL_DEPTH_TEST)
     glEnable(GL_CULL_FACE)
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
-
-    o = Object3D()
-    o.load_file("Human_Head.obj")
 
     DefineLuz()
     PosicUser()
@@ -131,22 +130,27 @@ def DesenhaCubo():
 
 # Function called constantly (idle) to update the animation
 def Animacao():
-    global soma_dt, tempo_antes
+    global estado_animacao
 
-    tempo_agora = time.time()
-    delta_time = tempo_agora - tempo_antes
-    tempo_antes = tempo_agora
+    if estado_animacao == "PAUSE":
+        return
 
-    soma_dt += delta_time
+    if estado_animacao == "REWIND":
+        o.current_frame = max(0, o.current_frame - 20)
+        print(f"REWIND <- currentFrame {o.current_frame}")
+        estado_animacao = "PLAY"
+        o.reproduz()
 
-    # We will call the update function at a fixed rate (approx 30 FPS)
-    # This fixed delta time (dt) is good for physics stability
-    if soma_dt > 1.0 / 30:
-        dt = 1.0 / 30
-        o.update(dt)  # <<< THIS IS THE ONLY LINE THAT CHANGES
-        soma_dt = 0
-        
-        glutPostRedisplay()
+    if estado_animacao == "FOWARD":
+        o.current_frame = min(len(o.baked_frames) - 1, o.current_frame + 20)
+        print(f"FOWARD -> currentFrame {o.current_frame}")
+        estado_animacao = "PLAY"
+        o.reproduz()
+
+    if estado_animacao == "PLAY":
+        o.reproduz()
+
+    glutPostRedisplay()
 
 
 def desenha():
@@ -165,45 +169,60 @@ def desenha():
 
 
 def teclado(key, x, y):
-    o.rotation = (1, 0, 0, o.rotation[3] + 2)
+    global estado_animacao, o
 
-    glutPostRedisplay()
-    pass
+    if key == b'p':
+        estado_animacao = "PLAY"
 
+    elif key == b's':
+        estado_animacao = "PAUSE"
 
+    elif key == b'r':
+        estado_animacao = "REWIND"
+
+    elif key == b'f':
+        estado_animacao = "FOWARD"
+        
 def main():
+    import sys
+
+    # 1. Inicializa o objeto e carrega o modelo
+    global o, tempo_animado
+    o = Object3D()
+    o.load_file("Human_Head.obj")
+
+    # 2. Fase de bake (sem renderização, só computação)
+    tempo_animado = 0.0
+    dt = 1.0 / 30.0
+
+
+    print("Baking animation...")
+    start_time = time.time()
+    while not o.playback_mode :
+        o.update(dt, tempo_animado)
+        tempo_animado += dt
+
+    end_time = time.time()
+    print(f"Bake time: {end_time - start_time:.2f} seconds")
+    print("Bake completo. Total de quadros:", len(o.baked_frames))
+
+    # 3. Agora inicia a janela GLUT para exibição
     glutInit(sys.argv)
-
-    # Define o modelo de operacao da GLUT
     glutInitDisplayMode(GLUT_RGBA | GLUT_DEPTH)
-
-    # Especifica o tamnho inicial em pixels da janela GLUT
-    # glutInitWindowSize(400, 400)# Soraia pediu assim
     glutInitWindowSize(1000, 600)
-
-    # Especifica a posição de início da janela
     glutInitWindowPosition(100, 100)
-
-    # Cria a janela passando o título da mesma como argumento
     glutCreateWindow(b"Computacao Grafica - 3D")
 
-    # Função responsável por fazer as inicializações
     init()
 
-    # Registra a funcao callback de redesenho da janela de visualizacao
     glutDisplayFunc(desenha)
-
-    # Registra a funcao callback para tratamento das teclas ASCII
     glutKeyboardFunc(teclado)
-
     glutIdleFunc(Animacao)
 
     try:
-        # Inicia o processamento e aguarda interacoes do usuario
         glutMainLoop()
     except SystemExit:
         pass
-
 
 if __name__ == "__main__":
     main()

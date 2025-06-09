@@ -1,11 +1,13 @@
-from copy import deepcopy
-from OpenGL.GLUT import *
-from OpenGL.GLU import *
-from OpenGL.GL import *
-from Point import *
-import time
-import random
 import math
+import random
+import time
+from copy import deepcopy
+
+from OpenGL.GL import *
+from OpenGL.GLU import *
+from OpenGL.GLUT import *
+
+from Point import *
 
 
 class Object3D:
@@ -16,18 +18,39 @@ class Object3D:
         self.faces = []
         self.position = Point(0, 0, 0)
         self.rotation = (0, 0, 0, 0)
-        self.animation_state = "SWAY"
-        self.animation_start_time = time.time()
+        self.animation_state = "SWAY"       # estado atual da simulação
+        self.animation_start_time = 0.0
         self.initial_time = time.time()
         self.velocities = []
-        self.boids_view_radius = 2.0
-        self.boids_max_speed = 3.0
-        self.cohesion_weight = 1.0
-        self.separation_weight = 1.5
-        self.alignment_weight = 1.0
-        self.separation_distance = 0.5
 
-    def load_file(self, file: str, vertex_sample_rate: int = 2):
+        # --- BOIDS PARAMETERS ---
+        self.boids_view_radius = 5.0
+        self.boids_max_speed = 2.5
+        self.cohesion_weight = 3.0
+        self.separation_weight = 3.2
+        self.alignment_weight = 1.0
+        self.separation_distance = 5.0
+
+
+        # --- NEW GOAL PARAMETERS ---
+        self.boids_goal   = Point(0, 3.3, -2.3)   # the point in space the boids will be attracted to
+        self.flocks_count = 6          # number of flocks
+        self.boids_goals = [Point(0, 4, 8), Point(2, 3, -3), Point(-2, 3, 3), Point(0, 5, -1)] # list of goals for boids
+        self.goal_weight  = 0.8             # how strongly each boid is pulled toward self.boids_goal
+
+        # # --- NEW GOAL PARAMETERS ---
+        # self.boids_goal = Point(0, 0, 0)     # The current position of the attractor
+        # self.goal_weight = 0.8               # How strongly the boids are pulled to the goal
+
+
+        self.baked_frames = []
+        self.bake_complete = False
+        self.playback_mode = False
+        self.color_frames = []
+        self.current_frame = 0  # <- Adicione isso aqui
+
+
+    def load_file(self, file: str, vertex_sample_rate: int = 1):
         """
         Load a simplified version of the file by skipping some vertices
         and their associated faces. For example, vertex_sample_rate=2
@@ -45,15 +68,14 @@ class Object3D:
                     continue
 
                 if values[0] == "v":
-                    if vertex_index % vertex_sample_rate == 0:
-                        point = Point(
-                            float(values[1]), float(values[2]), float(values[3])
-                        )
-                        self.vertices.append(point)
-                        self.original_vertices.append(deepcopy(point))
-                        self.velocities.append(Point(0, 0, 0))
-                        vertex_map[vertex_index] = new_index
-                        new_index += 1
+                    point = Point(
+                        float(values[1]), float(values[2]), float(values[3])
+                    )
+                    self.vertices.append(point)
+                    self.original_vertices.append(deepcopy(point))
+                    self.velocities.append(Point(0, 0, 0))
+                    vertex_map[vertex_index] = new_index
+                    new_index += 1
                     vertex_index += 1
 
         with open(file, "r") as f:
@@ -82,7 +104,6 @@ class Object3D:
         )
 
     def draw_vertices(self):
-        # ... (draw_vertices code remains the same) ...
         glPushMatrix()
         glTranslatef(self.position.x, self.position.y, self.position.z)
         glRotatef(
@@ -90,16 +111,16 @@ class Object3D:
         )
 
         colors = {
-            "SWAY": (0.0, 0.0, 1.0),  # Blue
-            "FALL": (1.0, 0.5, 0.0),  # Orange
-            "TORNADO": (0.5, 0.5, 0.5),  # Grey
-            "BOIDS": (0.0, 1.0, 0.0),  # Green
-            "REASSEMBLE": (1.0, 1.0, 0.0),  # Yellow
-            "DONE": (1.0, 1.0, 1.0),  # White
+            "SWAY": (0.0, 0.0, 1.0),      # Blue
+            "FALL": (1.0, 0.5, 0.0),      # Orange
+            "TORNADO": (0.5, 0.5, 0.5),   # Grey
+            "BOIDS": (0.3, 0.5, 1.0),     # Light Blue
+            "REASSEMBLE": (1.0, 1.0, 0.0),# Yellow
+            "DONE": (1.0, 1.0, 1.0),      # White
         }
-        glColor3f(*colors.get(self.animation_state, (1, 1, 1)))
-
+        glColor3f(*colors.get(self.color_frames[self.current_frame],(1, 1, 1)))
         glPointSize(8)
+
         for v in self.vertices:
             glPushMatrix()
             glTranslatef(v.x, v.y, v.z)
@@ -107,51 +128,92 @@ class Object3D:
             glPopMatrix()
         glPopMatrix()
 
-    def update(self, dt):
-        """Main update function, acts as a state machine."""
-        current_time = time.time()
-        elapsed_animation_time = current_time - self.animation_start_time
-        # self.animation_state = "BOIDS" # Debug
+    def update(self, dt, time_elapsed):
+        # Executa simulação e salva os dados por partícula (posição + estado)
+        self.simulate_animation(dt, time_elapsed)
+        self.baked_frames.append(
+            [(v.x, v.y, v.z,) for v in self.vertices]
+        )
+        self.color_frames.append(self.animation_state)
 
+    def reproduz(self):
+        # Só reproduz
+        if self.current_frame < len(self.baked_frames):
+            frame = self.baked_frames[self.current_frame]
+            self.vertices = [Point(x, y, z) for x, y, z in frame]
+            self.current_frame += 1
+
+    def simulate_animation(self, dt, animation_time):
+        timeline = [
+            ("SWAY", 0),
+            ("FALL", 6),
+            ("TORNADO", 12),
+            ("BOIDS", 20),
+            ("BOIDS2", 30),
+            ("REASSEMBLE", 40),
+            ("DONE", 50),
+        ]
+
+        # Detecta em qual estado deve estar, baseado no tempo atual
+        new_state = self.animation_state
+        for i in range(len(timeline) - 1):
+            state_name, start_time = timeline[i]
+            _, next_time = timeline[i + 1]
+            if start_time <= animation_time < next_time:
+                new_state = state_name
+                break
+            else:
+                new_state = "DONE"
+
+        # Se o estado mudou, atualiza
+        if new_state != self.animation_state:
+            self.transition_to_state(new_state)
+
+        # Executa animação conforme o estado atual
         if self.animation_state == "SWAY":
-            self.animate_sway(elapsed_animation_time)
-            if elapsed_animation_time > 6:
-                self.transition_to_state("FALL")
+            elapsed = animation_time - 0
+            self.animate_sway(elapsed)
+
         elif self.animation_state == "FALL":
             self.animate_fall(dt)
-            if elapsed_animation_time > 10:
-                self.transition_to_state("TORNADO")
+
         elif self.animation_state == "TORNADO":
-            self.animate_tornado(dt)
-            if elapsed_animation_time > 12:
-                self.transition_to_state("BOIDS")
+            elapsed = animation_time - 12
+            self.animate_tornado(dt, elapsed)
+
         elif self.animation_state == "BOIDS":
-            ## UPDATED TO CALL THE OPTIMIZED FUNCTION ##
             self.boids_update(dt)
-            if elapsed_animation_time > 20:
-                self.transition_to_state("REASSEMBLE")
+        
+        elif self.animation_state == "BOIDS2":
+            self.separation_weight = 10.0
+            self.cohesion_weight = 1.0
+            self.boids_max_speed = 5.0
+            self.boids_update(dt, explode=True)
+
         elif self.animation_state == "REASSEMBLE":
             self.animate_reassemble(dt)
-            if elapsed_animation_time > 8:
-                self.transition_to_state("DONE")
 
-    # ... (transition_to_state, sway, fall, tornado, reassemble functions remain the same) ...
+        # Finaliza bake ao chegar no DONE
+        if self.animation_state == "DONE":
+            self.bake_complete = True
+            self.playback_mode = True
+            print("Bake completo com", len(self.baked_frames), "quadros")
+
     def transition_to_state(self, new_state):
-        print(f"Transitioning from {self.animation_state} to {new_state}")
+        print(f"Transição de {self.animation_state} para {new_state}")
         self.animation_state = new_state
-        self.animation_start_time = time.time()
 
         if new_state == "FALL":
-            for i in range(len(self.velocities)):
-                self.velocities[i] = Point(0, 0, 0)
+            self.velocities = [Point(0, 0, 0) for _ in self.velocities]
+
         elif new_state in ["TORNADO", "BOIDS"]:
-            for i in range(len(self.velocities)):
-                self.velocities[i] = Point(
-                    random.uniform(-1, 1), random.uniform(-1, 1), random.uniform(-1, 1)
-                )
+            self.velocities = [
+                Point(random.uniform(-1, 1), random.uniform(-1, 1), random.uniform(-1, 1))
+                for _ in self.velocities
+            ]
+
         elif new_state == "SWAY":
-            for i in range(len(self.vertices)):
-                self.vertices[i] = self.original_vertices[i]
+            self.vertices = [Point(v.x, v.y, v.z) for v in self.original_vertices]
 
     def animate_sway(self, elapsed_time):
         max_angle, frequency = 12.0, 1.8
@@ -174,22 +236,77 @@ class Object3D:
                 self.velocities[i].y *= -damping
                 self.velocities[i].x *= 0.9
 
-    def animate_tornado(self, dt):
+    def animate_tornado(self, dt, time):
         center = Point(0, -2, 0)
-        up_speed, rot_speed, suck_str = 1.5, 15.0, 2.0
+        max_radius = 2.0
+        up_speed = 7.0
+        rot_speed = 10.0
+        suck_strength = 6.0
+        top_height = 2.2  # altura máxima no centro
+        base_height = 1.0  # altura máxima nas bordas
+
         for i, v in enumerate(self.vertices):
             to_center = Point(center.x - v.x, 0, center.z - v.z)
-            dist = to_center.magnitude() or 0.1
-            radial_force = to_center.normalized() * suck_str
-            tangent_force = Point(-to_center.z, 0, to_center.x).normalized() * (
-                rot_speed / dist
-            )
-            up_force = Point(0, up_speed / (1 + dist * 0.5), 0)
-            self.velocities[i] += (radial_force + tangent_force + up_force) * dt
-            self.vertices[i] = v + self.velocities[i] * dt
-            self.velocities[i] *= 0.98
+            dist = to_center.magnitude() or 0.01
 
-    def boids_update(self, dt):
+            # delay para sair baseado na distância
+            start_delay = dist * 0.5
+            if time < start_delay:
+                continue
+
+            # altura máxima baseada na distância (centro sobe mais)
+            t = min(dist / max_radius, 1.0)
+            max_height = (1 - t) * top_height + t * base_height
+
+            # força radial
+            if dist > max_radius:
+                radial_force = to_center.normalized() * suck_strength
+            else:
+                radial_force = to_center.normalized() * (suck_strength * 0.3)
+
+            # força tangencial (gira mais conforme sobe)
+            height_factor = min(max((v.y + 2.0) / (top_height + 2.0), 0.0), 1.0)
+            tangent = Point(-to_center.z, 0, to_center.x).normalized()
+            tangent_force = tangent * (rot_speed * height_factor / dist)
+
+            # subida até altura personalizada
+            if v.y < max_height:
+                height_boost = max(0.0, (max_height - v.y)) * 0.2
+                up_factor = (1.5 - min(dist, 1.5)) / 1.5
+                up_force = Point(0, (up_speed * (0.3 + up_factor)) + height_boost, 0)
+            else:
+                up_force = Point(0, 0, 0)
+
+            total_force = radial_force + tangent_force + up_force
+
+            self.velocities[i] += total_force * dt
+            self.vertices[i] += self.velocities[i] * dt
+            self.velocities[i] *= 0.965
+
+    def apply_soft_boundary(self, pos, vel, strength=1.0, threshold=20.0):
+        steer = Point(0.0, 0.0, 0.0)
+
+        for axis in ['x', 'y', 'z']:
+            val = getattr(pos, axis)
+            v = getattr(vel, axis)
+            min_val = -100  # Change as needed
+            max_val = 100
+
+            # Lower boundary
+            if val - min_val < threshold:
+                delta = (threshold - (val - min_val)) / threshold
+                setattr(steer, axis, getattr(steer, axis) + delta * strength)
+
+            # Upper boundary
+            if max_val - val < threshold:
+                delta = (threshold - (max_val - val)) / threshold
+                setattr(steer, axis, getattr(steer, axis) - delta * strength)
+
+        return steer
+
+
+
+    def boids_update(self, dt, explode=False):
         """
         Very‐fast boids: four separate flocks, each using a 3D uniform‐grid (cell hashing)
         to limit neighbor searches to nearby cells.  
@@ -202,8 +319,9 @@ class Object3D:
         - self.cohesion_weight, self.separation_weight, self.alignment_weight: floats
         - self.separation_distance: float
         
-        Splits the vertices into exactly 4 flocks of equal (or nearly equal) size.
+
         """
+
         N = len(self.vertices)
         if N == 0:
             return
@@ -211,7 +329,7 @@ class Object3D:
         # 1) Determine flock‐assignment (4 flocks, by index range). 
         #    e.g. if N=1000, flock_size=250→
         #      flock 0 = [0..249], flock 1 = [250..499], flock 2 = [500..749], flock 3 = [750..999].
-        n_flocks = 4
+        n_flocks = self.flocks_count
         base = N // n_flocks
         flock_ranges = []
         for f in range(n_flocks):
@@ -351,6 +469,21 @@ class Object3D:
                     steer.y += sep_acc.y * inv_sep * self.separation_weight
                     steer.z += sep_acc.z * inv_sep * self.separation_weight
 
+
+                # boundary_steer = self.apply_soft_boundary(pos_i, vel_i)
+                # steer.x += boundary_steer.x
+                # steer.y += boundary_steer.y
+                # steer.z += boundary_steer.z
+                if not explode:
+                    # flock_goal_point = self.boids_goals[f_idx]
+                    goal_dir = self.boids_goal - pos_i
+
+                    if goal_dir.magnitude() > 0:
+                        goal_dir = goal_dir.normalized()
+                        steer.x += goal_dir.x * self.goal_weight
+                        steer.y += goal_dir.y * self.goal_weight
+                        steer.z += goal_dir.z * self.goal_weight
+
                 # 4) Update velocity: v_new = v_old + steer * dt
                 vel_i.x += steer.x * dt
                 vel_i.y += steer.y * dt
@@ -372,7 +505,6 @@ class Object3D:
                 # Write back
                 self.velocities[i] = vel_i
                 self.vertices[i] = pos_i
-
 
     def animate_reassemble(self, dt):
         attraction_strength = 4.0
