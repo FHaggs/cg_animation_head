@@ -4,7 +4,6 @@ from OpenGL.GL import *
 
 import time
 
-from pygame import Color
 
 from Objeto3D import Object3D
 import Point
@@ -198,11 +197,13 @@ def main():
 
 
     print("Baking animation...")
-
+    start_time = time.time()
     while not o.playback_mode :
         o.update(dt, tempo_animado)
         tempo_animado += dt
 
+    end_time = time.time()
+    print(f"Bake time: {end_time - start_time:.2f} seconds")
     print("Bake completo. Total de quadros:", len(o.baked_frames))
 
     # 3. Agora inicia a janela GLUT para exibição

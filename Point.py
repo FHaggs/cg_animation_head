@@ -23,6 +23,9 @@ class Point:
     def magnitude(self):
         return math.sqrt(self.x**2 + self.y**2 + self.z**2)
 
+    def magnitude_squared(self):
+        return self.x**2 + self.y**2 + self.z**2
+
     def normalized(self):
         mag = self.magnitude()
         if mag == 0:
