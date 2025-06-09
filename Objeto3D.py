@@ -1,11 +1,13 @@
-from copy import deepcopy
-from OpenGL.GLUT import *
-from OpenGL.GLU import *
-from OpenGL.GL import *
-from Point import *
-import time
-import random
 import math
+import random
+import time
+from copy import deepcopy
+
+from OpenGL.GL import *
+from OpenGL.GLU import *
+from OpenGL.GLUT import *
+
+from Point import *
 
 
 class Object3D:
@@ -23,13 +25,18 @@ class Object3D:
 
         # --- BOIDS PARAMETERS ---
         self.boids_view_radius = 5.0
-        self.boids_max_speed = 5.0
-        self.cohesion_weight = 0.5
-        self.separation_weight = 3.0
+        self.boids_max_speed = 2.5
+        self.cohesion_weight = 3.0
+        self.separation_weight = 3.2
         self.alignment_weight = 1.0
         self.separation_distance = 5.0
 
 
+        # --- NEW GOAL PARAMETERS ---
+        self.boids_goal   = Point(0, 3.0, -2.5)   # the point in space the boids will be attracted to
+        self.flocks_count = 4          # number of flocks
+        self.boids_goals = [Point(0, 4, 8), Point(2, 3, -3), Point(-2, 3, 3), Point(0, 5, -1)] # list of goals for boids
+        self.goal_weight  = 0.8             # how strongly each boid is pulled toward self.boids_goal
 
         # # --- NEW GOAL PARAMETERS ---
         # self.boids_goal = Point(0, 0, 0)     # The current position of the attractor
@@ -132,7 +139,7 @@ class Object3D:
     def reproduz(self):
         # Só reproduz
         if self.current_frame < len(self.baked_frames):
-            frame = self.baked_frames[self.current_frame + 1]
+            frame = self.baked_frames[self.current_frame]
             self.vertices = [Point(x, y, z) for x, y, z in frame]
             self.current_frame += 1
 
@@ -142,8 +149,9 @@ class Object3D:
             ("FALL", 6),
             ("TORNADO", 12),
             ("BOIDS", 20),
-            ("REASSEMBLE",30 ),
-            ("DONE", 40),
+            ("BOIDS2", 30),
+            ("REASSEMBLE", 40),
+            ("DONE", 50),
         ]
 
         # Detecta em qual estado deve estar, baseado no tempo atual
@@ -175,6 +183,12 @@ class Object3D:
 
         elif self.animation_state == "BOIDS":
             self.boids_update(dt)
+        
+        elif self.animation_state == "BOIDS2":
+            self.separation_weight = 10.0
+            self.cohesion_weight = 1.0
+            self.boids_max_speed = 5.0
+            self.boids_update(dt, explode=True)
 
         elif self.animation_state == "REASSEMBLE":
             self.animate_reassemble(dt)
@@ -292,7 +306,7 @@ class Object3D:
 
 
 
-    def boids_update(self, dt):
+    def boids_update(self, dt, explode=False):
         """
         Very‐fast boids: four separate flocks, each using a 3D uniform‐grid (cell hashing)
         to limit neighbor searches to nearby cells.  
@@ -307,6 +321,7 @@ class Object3D:
         
 
         """
+
         N = len(self.vertices)
         if N == 0:
             return
@@ -314,7 +329,7 @@ class Object3D:
         # 1) Determine flock‐assignment (4 flocks, by index range). 
         #    e.g. if N=1000, flock_size=250→
         #      flock 0 = [0..249], flock 1 = [250..499], flock 2 = [500..749], flock 3 = [750..999].
-        n_flocks = 10
+        n_flocks = self.flocks_count
         base = N // n_flocks
         flock_ranges = []
         for f in range(n_flocks):
@@ -455,10 +470,19 @@ class Object3D:
                     steer.z += sep_acc.z * inv_sep * self.separation_weight
 
 
-                boundary_steer = self.apply_soft_boundary(pos_i, vel_i)
-                steer.x += boundary_steer.x
-                steer.y += boundary_steer.y
-                steer.z += boundary_steer.z
+                # boundary_steer = self.apply_soft_boundary(pos_i, vel_i)
+                # steer.x += boundary_steer.x
+                # steer.y += boundary_steer.y
+                # steer.z += boundary_steer.z
+                if not explode:
+                    # flock_goal_point = self.boids_goals[f_idx]
+                    goal_dir = self.boids_goal - pos_i
+
+                    if goal_dir.magnitude() > 0:
+                        goal_dir = goal_dir.normalized()
+                        steer.x += goal_dir.x * self.goal_weight
+                        steer.y += goal_dir.y * self.goal_weight
+                        steer.z += goal_dir.z * self.goal_weight
 
                 # 4) Update velocity: v_new = v_old + steer * dt
                 vel_i.x += steer.x * dt
