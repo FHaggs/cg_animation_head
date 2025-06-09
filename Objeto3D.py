@@ -33,8 +33,8 @@ class Object3D:
 
 
         # --- NEW GOAL PARAMETERS ---
-        self.boids_goal   = Point(0, 3.0, -2.5)   # the point in space the boids will be attracted to
-        self.flocks_count = 4          # number of flocks
+        self.boids_goal   = Point(0, 3.3, -2.3)   # the point in space the boids will be attracted to
+        self.flocks_count = 6          # number of flocks
         self.boids_goals = [Point(0, 4, 8), Point(2, 3, -3), Point(-2, 3, 3), Point(0, 5, -1)] # list of goals for boids
         self.goal_weight  = 0.8             # how strongly each boid is pulled toward self.boids_goal
 
