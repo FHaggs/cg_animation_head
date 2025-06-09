@@ -21,8 +21,6 @@ class Object3D:
         self.position = Point(0, 0, 0)
         self.rotation = (0, 0, 0, 0)
         self.animation_state = "SWAY"       # estado atual da simulação
-        self.animation_start_time = 0.0
-        self.initial_time = time.time()
         self.velocities = []
 
         # --- BOIDS PARAMETERS ---
@@ -47,22 +45,11 @@ class Object3D:
 
         self.baked_frames = []
         self.bake_complete = False
-        self.playback_mode = False
         self.color_frames = []
-        self.current_frame = 0  # <- Adicione isso aqui
+        self.current_frame = 0  
 
 
     def load_file(self, file: str, vertex_sample_rate: int = 1):
-        """
-        Load a simplified version of the file by skipping some vertices
-        and their associated faces. For example, vertex_sample_rate=2
-        will keep every 2nd vertex.
-        """
-
-        vertex_map = {}  # Maps original index to new index
-        vertex_index = 0
-        new_index = 0
-
         with open(file, "r") as f:
             for line in f:
                 values = line.split()
@@ -76,36 +63,21 @@ class Object3D:
                     self.vertices.append(point)
                     self.original_vertices.append(deepcopy(point))
                     self.velocities.append(Point(0, 0, 0))
-                    vertex_map[vertex_index] = new_index
-                    new_index += 1
-                    vertex_index += 1
-
-        with open(file, "r") as f:
-            for line in f:
-                values = line.split()
-                if not values:
-                    continue
 
                 if values[0] == "f":
                     face = []
-                    skip_face = False
                     for fVertex in values[1:]:
                         fInfo = fVertex.split("/")
                         original_idx = int(fInfo[0]) - 1
-                        if original_idx in vertex_map:
-                            face.append(vertex_map[original_idx])
-                        else:
-                            skip_face = True
-                            break  # Don't add this face if any vertex was skipped
-
-                    if not skip_face:
-                        self.faces.append(face)
+                        face.append(original_idx)
+                    self.faces.append(face)
 
         print(
             f"Loaded {len(self.vertices)} vertices and {len(self.faces)} faces. Initial animation: {self.animation_state}"
         )
 
     def draw_vertices(self):
+        # ... (draw_vertices code remains the same) ...
         glPushMatrix()
         glTranslatef(self.position.x, self.position.y, self.position.z)
         glRotatef(
@@ -121,8 +93,9 @@ class Object3D:
             "DONE": (1.0, 1.0, 1.0),      # White
         }
         glColor3f(*colors.get(self.color_frames[self.current_frame],(1, 1, 1)))
-        glPointSize(8)
 
+        glPointSize(8)
+        
         for v in self.vertices:
             glPushMatrix()
             glTranslatef(v.x, v.y, v.z)
@@ -134,7 +107,7 @@ class Object3D:
         # Executa simulação e salva os dados por partícula (posição + estado)
         self.simulate_animation(dt, time_elapsed)
         self.baked_frames.append(
-            [(v.x, v.y, v.z,) for v in self.vertices]
+            [(v.x, v.y, v.z,) for v in self.vertices] #[(x1, y1, z1), (x2, y2, z2), ..., (xn, yn, zn)]
         )
         self.color_frames.append(self.animation_state)
 
@@ -144,6 +117,7 @@ class Object3D:
             frame = self.baked_frames[self.current_frame]
             self.vertices = [Point(x, y, z) for x, y, z in frame]
             self.current_frame += 1
+
 
     def simulate_animation(self, dt, animation_time):
         timeline = [
@@ -198,7 +172,6 @@ class Object3D:
         # Finaliza bake ao chegar no DONE
         if self.animation_state == "DONE":
             self.bake_complete = True
-            self.playback_mode = True
             print("Bake completo com", len(self.baked_frames), "quadros")
 
     def transition_to_state(self, new_state):

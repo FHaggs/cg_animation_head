@@ -119,89 +119,6 @@ def DesenhaPiso():
         glTranslated(1, 0, 0)
     glPopMatrix()
 
-def DesenhaBotoes():
-    # Salva estado atual
-    glPushAttrib(GL_ENABLE_BIT)
-    glDisable(GL_DEPTH_TEST)
-    glDisable(GL_LIGHTING)
-
-    # Projeção ortográfica 2D
-    glMatrixMode(GL_PROJECTION)
-    glPushMatrix()
-    glLoadIdentity()
-    gluOrtho2D(0, 1000, 0, 600)
-
-    glMatrixMode(GL_MODELVIEW)
-    glPushMatrix()
-    glLoadIdentity()
-
-    # Desenha só os ícones
-    for nome, (x1, y1, x2, y2) in botoes.items():
-        glColor3f(1.0, 0.0, 0.0)
-        if nome == "PLAY":
-            icone_play(x1 + 10, y1 + 10)
-        elif nome == "PAUSE":
-            icone_pause(x1 + 10, y1 + 10)
-        elif nome == "REWIND":
-            icone_rewind(x1 + 5, y1 + 10)
-        elif nome == "FOWARD":
-            icone_foward(x1 + 5, y1 + 10)
-
-    # Restaura projeção
-    glPopMatrix()  # MODELVIEW
-    glMatrixMode(GL_PROJECTION)
-    glPopMatrix()
-    glMatrixMode(GL_MODELVIEW)
-
-    # Restaura estados antigos
-    glPopAttrib()
-
-def icone_foward(x, y):
-    glBegin(GL_TRIANGLES)
-    # Primeira seta
-    glVertex2f(x, y)
-    glVertex2f(x, y + 20)
-    glVertex2f(x + 15, y + 10)
-
-    # Segunda seta
-    glVertex2f(x + 15, y)
-    glVertex2f(x + 15, y + 20)
-    glVertex2f(x + 30, y + 10)
-    glEnd()
-
-def icone_rewind(x, y):
-    glBegin(GL_TRIANGLES)
-    # Primeira seta
-    glVertex2f(x + 15, y)
-    glVertex2f(x + 15, y + 20)
-    glVertex2f(x, y + 10)
-
-    # Segunda seta
-    glVertex2f(x + 30, y)
-    glVertex2f(x + 30, y + 20)
-    glVertex2f(x + 15, y + 10)
-    glEnd()
-
-def icone_pause(x, y):
-    glBegin(GL_QUADS)
-    glVertex2f(x, y)
-    glVertex2f(x + 5, y)
-    glVertex2f(x + 5, y + 20)
-    glVertex2f(x, y + 20)
-
-    glVertex2f(x + 10, y)
-    glVertex2f(x + 15, y)
-    glVertex2f(x + 15, y + 20)
-    glVertex2f(x + 10, y + 20)
-    glEnd()
-
-def icone_play(x, y):
-    glBegin(GL_TRIANGLES)
-    glVertex2f(x, y)
-    glVertex2f(x, y + 20)
-    glVertex2f(x + 15, y + 10)
-    glEnd()
-
 # Function called constantly (idle) to update the animation
 def Animacao():
     global estado_animacao
@@ -232,27 +149,11 @@ def desenha():
 
     glMatrixMode(GL_MODELVIEW)
 
-    DesenhaBotoes()
     DesenhaPiso()
     o.draw_vertices()
 
     glutSwapBuffers()
     pass
-
-def mouse_clique(botao, estado, x, y):
-    print(f"clicado em x={x}, y={y}")
-    altura_janela = glutGet(GLUT_WINDOW_HEIGHT)
-    y_corrigido = altura_janela - y
-    print(f"y corrigido: {y_corrigido}")
-
-    global estado_animacao
-    if botao == GLUT_LEFT_BUTTON and estado == GLUT_DOWN:
-        for nome, (x1, y1, x2, y2) in botoes.items():
-            print(f"Verificando botão '{nome}' com área ({x1}, {y1}, {x2}, {y2})")
-            if x1 <= x <= x2 and y1 <= y_corrigido <= y2:
-                estado_animacao = nome
-                print(f">>> Botão clicado: {nome}")
-                break
 
 def teclado(key, x, y):
     global estado_animacao, o
@@ -283,13 +184,12 @@ def main():
 
 
     print("Baking animation...")
-    start_time = time.time()
-    while not o.playback_mode :
+
+    while not o.bake_complete :
         o.update(dt, tempo_animado)
         tempo_animado += dt
 
     end_time = time.time()
-    print(f"Bake time: {end_time - start_time:.2f} seconds")
     print("Bake completo. Total de quadros:", len(o.baked_frames))
 
     # 3. Agora inicia a janela GLUT para exibição
@@ -301,7 +201,6 @@ def main():
 
     init()
 
-    glutMouseFunc(mouse_clique)
     glutDisplayFunc(desenha)
     glutKeyboardFunc(teclado)
     glutIdleFunc(Animacao)
