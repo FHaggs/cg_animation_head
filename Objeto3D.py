@@ -35,7 +35,6 @@ class Object3D:
         # --- NEW GOAL PARAMETERS ---
         self.boids_goal   = Point(0, 3.3, -2.3)   # the point in space the boids will be attracted to
         self.flocks_count = 6          # number of flocks
-        self.boids_goals = [Point(0, 4, 8), Point(2, 3, -3), Point(-2, 3, 3), Point(0, 5, -1)] # list of goals for boids
         self.goal_weight  = 0.8             # how strongly each boid is pulled toward self.boids_goal
 
         # # --- NEW GOAL PARAMETERS ---
@@ -181,7 +180,7 @@ class Object3D:
         if new_state == "FALL":
             self.velocities = [Point(0, 0, 0) for _ in self.velocities]
 
-        elif new_state in ["TORNADO", "BOIDS"]:
+        elif new_state == "BOIDS":
             self.velocities = [
                 Point(random.uniform(-1, 1), random.uniform(-1, 1), random.uniform(-1, 1))
                 for _ in self.velocities
@@ -191,10 +190,10 @@ class Object3D:
             self.vertices = [Point(v.x, v.y, v.z) for v in self.original_vertices]
 
     def animate_sway(self, elapsed_time):
-        max_angle, frequency = 12.0, 1.8
+        max_angle, frequency = 12.0, 2.0
         angle = math.radians(max_angle * math.sin(elapsed_time * frequency))
         cos_a, sin_a = math.cos(angle), math.sin(angle)
-        for i, original_v in enumerate(self.original_vertices):
+        for i, original_v in enumerate(self.original_vertices): #rotation
             self.vertices[i].y = original_v.y * cos_a - original_v.z * sin_a
             self.vertices[i].z = original_v.y * sin_a + original_v.z * cos_a
             self.vertices[i].x = original_v.x
@@ -209,7 +208,6 @@ class Object3D:
             if v.y < ground_y:
                 v.y = ground_y
                 self.velocities[i].y *= -damping
-                self.velocities[i].x *= 0.9
 
     def animate_tornado(self, dt, time):
         center = Point(0, -2, 0)
@@ -217,8 +215,8 @@ class Object3D:
         up_speed = 7.0
         rot_speed = 10.0
         suck_strength = 6.0
-        top_height = 2.2  # altura máxima no centro
-        base_height = 1.0  # altura máxima nas bordas
+        top_height = 2.2  
+        base_height = 0.5  
 
         for i, v in enumerate(self.vertices):
             to_center = Point(center.x - v.x, 0, center.z - v.z)
@@ -240,13 +238,13 @@ class Object3D:
                 radial_force = to_center.normalized() * (suck_strength * 0.3)
 
             # força tangencial (gira mais conforme sobe)
-            height_factor = min(max((v.y + 2.0) / (top_height + 2.0), 0.0), 1.0)
+            height_factor = min(max((v.y + 2.0) / (top_height + 2.0), 0.0), 1.0) 
             tangent = Point(-to_center.z, 0, to_center.x).normalized()
             tangent_force = tangent * (rot_speed * height_factor / dist)
 
             # subida até altura personalizada
             if v.y < max_height:
-                height_boost = max(0.0, (max_height - v.y)) * 0.2
+                height_boost = max(0.0, (max_height - v.y)) * 0.2 #Aumenta o impulso vertical quanto mais longe estiver de max_height.
                 up_factor = (1.5 - min(dist, 1.5)) / 1.5
                 up_force = Point(0, (up_speed * (0.3 + up_factor)) + height_boost, 0)
             else:

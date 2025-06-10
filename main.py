@@ -8,17 +8,8 @@ import time
 from Objeto3D import Object3D
 
 o: Object3D
-tempo_antes = time.time()
-soma_dt = 0
 estado_animacao = "PLAY"  # Pode começar pausado ou em "PLAY"
 tempo_animado = 0.0
-
-botoes = {
-    "PLAY":   (10, 10, 125, 50),
-    "PAUSE":  (135, 10, 250, 50),
-    "REWIND": (270, 10, 385, 50),
-    "FOWARD": (405, 10, 520, 50),
-}
 
 def init():
     glClearColor(0.5, 0.5, 0.9, 1.0)
